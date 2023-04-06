@@ -1,79 +1,71 @@
-# 愝掕僼傽僀儖偐傜僼僅儖僟乕僷僗傪庢摼偡傞
-$config = Get-Content .\config.txt
-$folder = $config.Trim()
+$folder = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# 曄姺娭悢傪掕媊偡傞
+$logFilePath = Join-Path -Path $folder -ChildPath ('conversion_{0:yyyyMMdd_HHmmss}.log' -f (Get-Date))
+
 function ConvertTo-Excel {
     param (
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path $_ -PathType 'Leaf' })]
         [string]$CsvFilePath,
         [Parameter(Mandatory = $true)]
-        [string]$ExcelFilePath
+        [string]$ExcelFilePath,
+        [Parameter(Mandatory = $true)]
+        [string]$LogFilePath
     )
 
-    # CSV僼傽僀儖傪撉傒崬傓
-    $csv = Import-Csv $CsvFilePath -Header '夛幮僐乕僪', '揦曑僐乕僪', 'Jancode', 'NS斕攧壙奿'
+    # 导入 CSV 文件到数据表中
+    $csv = Import-Csv $CsvFilePath
 
-    # Jancode偱僜乕僩偝傟偨僨乕僞傪庢摼偡傞
-    $sorted = $csv | Sort-Object -Property Jancode
+    # 排序数据表
+    $sorted = $csv | Sort-Object -Property 会社コード, 店舗コード, Jancode
 
-    # Excel傾僾儕働乕僔儑儞僆僽僕僃僋僩傪嶌惉偡傞
+    # 创建 Excel 对象
     $excel = New-Object -ComObject Excel.Application
 
-    # Excel傪旕昞帵偵偡傞
+    # 隐藏 Excel 界面
     $excel.Visible = $false
 
-    # 怴偟偄儚乕僋僽僢僋傪嶌惉偡傞
+    # 添加一个新的工作簿
     $workbook = $excel.Workbooks.Add()
 
-    # 嵟弶偺儚乕僋僔乕僩僆僽僕僃僋僩傪庢摼偡傞
+    # 选择工作表
     $worksheet = $workbook.Worksheets.Item(1)
 
-    # 僿僢僟乕傪彂偒崬傓
-    $worksheet.Cells.Item(1,1) = "夛幮僐乕僪"
-    $worksheet.Cells.Item(1,2) = "揦曑僐乕僪"
+    # 写入表头
+    $worksheet.Cells.Item(1,1) = "会社コード"
+    $worksheet.Cells.Item(1,2) = "店舗コード"
     $worksheet.Cells.Item(1,3) = "Jancode"
-    $worksheet.Cells.Item(1,4) = "NS斕攧壙奿"
+    $worksheet.Cells.Item(1,4) = "NS販売価格"
 
-   # 僨乕僞傪彂偒崬傓
+    # 写入数据
     $row = 2
     foreach ($item in $sorted) {
-        $worksheet.Cells.Item($row,1) = $item."夛幮僐乕僪"
-        $worksheet.Cells.Item($row,2) = $item."揦曑僐乕僪"
+        $worksheet.Cells.Item($row,1) = $item."会社コード"
+        $worksheet.Cells.Item($row,2) = $item."店舗コード"
         $worksheet.Cells.Item($row,3) = $item."Jancode"
-        $worksheet.Cells.Item($row,4) = $item."NS斕攧壙奿"
+        $worksheet.Cells.Item($row,4) = $item."NS販売価格"
         $row++
     }
 
-    # Excel僼傽僀儖傪曐懚偡傞
+    # 保存 Excel 文件
     $workbook.SaveAs($ExcelFilePath)
 
-    # 儚乕僋僽僢僋偲Excel傾僾儕働乕僔儑儞傪暵偠傞
+    # 记录日志
+    $logMessage = "{0} - {1}" -f (Get-Date), (Split-Path -Leaf $ExcelFilePath)
+    Add-Content -Path $LogFilePath -Value $logMessage
+
+    # 释放资源
     $workbook.Close()
     $excel.Quit()
-
-    # Excel僆僽僕僃僋僩傪夝曻偡傞
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($worksheet) | Out-Null
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbook) | Out-Null
     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 }
 
-# 5暘偛偲偵僼僅儖僟乕傪僗僉儍儞偡傞
-while ($true) {
-    Write-Host "Scanning folder: $folder"
-    Get-ChildItem $folder -Filter *.csv | ForEach-Object {
-        $csvPath = $_.FullName
-        $excelPath = $_.FullName.Replace(".csv", ".xlsx")
-        Write-Host "Converting $csvPath to $excelPath"
-        try {
-            ConvertTo-Excel -CsvFilePath $csvPath -ExcelFilePath $excelPath
-            Remove-Item $csvPath
-        } catch {
-            Write-Host "Error converting $csvPath: $_"
-        }
-    }
-    Start-Sleep -Seconds 300
+# 处理所有 CSV 文件
+Get-ChildItem $folder -Filter *.csv | ForEach-Object {
+    $csvPath = $_.FullName
+    $excelPath = Join-Path -Path $folder -ChildPath ($_.BaseName + '.xlsx')
+    ConvertTo-Excel -CsvFilePath $csvPath -ExcelFilePath $excelPath -LogFilePath $logFilePath
+    Remove-Item $csvPath
 }
