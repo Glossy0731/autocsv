@@ -1,43 +1,43 @@
-$folder = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 設定ファイルからフォルダーパスを取得する
+$config = Get-Content .\config.txt
+$folder = $config.Trim()
+$logFile = ".\convert.log"
 
-$logFilePath = Join-Path -Path $folder -ChildPath ('conversion_{0:yyyyMMdd_HHmmss}.log' -f (Get-Date))
-
+# 変換関数を定義する
 function ConvertTo-Excel {
     param (
         [Parameter(Mandatory = $true)]
         [ValidateScript({ Test-Path $_ -PathType 'Leaf' })]
         [string]$CsvFilePath,
         [Parameter(Mandatory = $true)]
-        [string]$ExcelFilePath,
-        [Parameter(Mandatory = $true)]
-        [string]$LogFilePath
+        [string]$ExcelFilePath
     )
 
-    # 导入 CSV 文件到数据表中
-    $csv = Import-Csv $CsvFilePath
+    # CSVファイルを読み込む
+    $csv = Import-Csv $CsvFilePath -Header '会社コード', '店舗コード', 'Jancode', 'NS販売価格'
 
-    # 排序数据表
-    $sorted = $csv | Sort-Object -Property 会社コード, 店舗コード, Jancode
+    # Jancodeでソートされたデータを取得する
+    $sorted = $csv | Sort-Object -Property Jancode
 
-    # 创建 Excel 对象
+    # Excelアプリケーションオブジェクトを作成する
     $excel = New-Object -ComObject Excel.Application
 
-    # 隐藏 Excel 界面
+    # Excelを非表示にする
     $excel.Visible = $false
 
-    # 添加一个新的工作簿
+    # 新しいワークブックを作成する
     $workbook = $excel.Workbooks.Add()
 
-    # 选择工作表
+    # 最初のワークシートオブジェクトを取得する
     $worksheet = $workbook.Worksheets.Item(1)
 
-    # 写入表头
+    # ヘッダーを書き込む
     $worksheet.Cells.Item(1,1) = "会社コード"
     $worksheet.Cells.Item(1,2) = "店舗コード"
     $worksheet.Cells.Item(1,3) = "Jancode"
     $worksheet.Cells.Item(1,4) = "NS販売価格"
 
-    # 写入数据
+   # データを書き込む
     $row = 2
     foreach ($item in $sorted) {
         $worksheet.Cells.Item($row,1) = $item."会社コード"
@@ -47,25 +47,34 @@ function ConvertTo-Excel {
         $row++
     }
 
-    # 保存 Excel 文件
+    # Excelファイルを保存する
     $workbook.SaveAs($ExcelFilePath)
 
-    # 记录日志
-    $logMessage = "{0} - {1}" -f (Get-Date), (Split-Path -Leaf $ExcelFilePath)
-    Add-Content -Path $LogFilePath -Value $logMessage
-
-    # 释放资源
+    # ワークブックとExcelアプリケーションを閉じる
     $workbook.Close()
     $excel.Quit()
+
+    # Excelオブジェクトを解放する
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($worksheet) | Out-Null
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($workbook) | Out-Null
     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
     [System.GC]::Collect()
     [System.GC]::WaitForPendingFinalizers()
 }
 
-# 处理所有 CSV 文件
-Get-ChildItem $folder -Filter *.csv | ForEach-Object {
-    $csvPath = $_.FullName
-    $excelPath = Join-Path -Path $folder -ChildPath ($_.BaseName + '.xlsx')
-    ConvertTo-Excel -CsvFilePath $csvPath -ExcelFilePath $excelPath -LogFilePath $logFilePath
-    Remove-Item $csvPath
+# 5分ごとにフォルダーをスキャンする
+while ($true) {
+    Write-Host "Scanning folder: $folder"
+    Get-ChildItem $folder -Filter *.csv | ForEach-Object {
+        $csvPath = $_.FullName
+        $excelPath = $_.FullName.Replace(".csv", ".xlsx")
+        Write-Host "Converting $csvPath to $excelPath"
+        try {
+            ConvertTo-Excel -CsvFilePath $csvPath -ExcelFilePath $excelPath
+            Remove-Item $csvPath
+        } catch {
+            Write-Host "Error converting $csvPath: $_"
+        }
+    }
+    Start-Sleep -Seconds 300
 }
