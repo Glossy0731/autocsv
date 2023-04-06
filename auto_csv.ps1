@@ -62,6 +62,10 @@ function ConvertTo-Excel {
     [System.GC]::WaitForPendingFinalizers()
 }
 
+$logFilePath = Join-Path $env:USERPROFILE 'csv-to-excel.log'
+$logMessage = "$(Get-Date) - Converted $($CsvFilePath) to $($ExcelFilePath)"
+Add-Content -Path $logFilePath -Value $logMessage
+
 # 5·Ö¤´¤È¤Ë¥Õ¥©¥ë¥À©`¤ò¥¹¥­¥ã¥ó¤¹¤ë
 while ($true) {
     Write-Host "Scanning folder: $folder"
