@@ -1,3 +1,2 @@
 @echo off
-powershell.exe -ExecutionPolicy Bypass -File "auto_csv.ps1" -Encoding utf8 >> "log.txt"
-pause
+powershell.exe -ExecutionPolicy Bypass -Command "& { Get-Date -Format 'yyyy-MM-dd HH:mm:ss'; & .\auto_csv.ps1 }" >> "log.txt"
